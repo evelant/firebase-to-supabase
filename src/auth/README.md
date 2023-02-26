@@ -22,10 +22,11 @@ This module automates the process of converting auth users from a Firebase proje
 * click `Service Accounts` at the center of the top menu
 * select `Firebase Admin SDK` at the left then click the `Generate new private key` button on the right (bottom)
 * click `Generate key`
+* save the file to the `firebase-to-supabase/credentials` folder
 * rename the downloaded file to `firebase-service.json`
 
 #### Set up your `supabase-service.json` file
-* copy or rename `supabase-service-sample.json` to `supabase-service.json`
+* copy or rename `credentials/supabase-service-sample.json` to `credentials/supabase-service.json`
 * edit the `supabase-service.json` file:
     * log in to [app.supabase.io](https://app.supabase.io) and open your project
     * click the `settings` (gear) icon at the bottom of the left menu

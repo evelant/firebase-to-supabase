@@ -9,3 +9,9 @@ __*
 fly.toml
 local.env.sh
 
+credentials/firebase-service.json
+credentials/supabase-service.json
+credentials/supabase-keys.json
+exported/**/*
+dist
+**/temp.sql

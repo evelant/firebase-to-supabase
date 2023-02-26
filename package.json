@@ -1,20 +1,36 @@
 {
-  "name": "firebase-to-supabase",
-  "version": "1.0.0",
-  "description": "Migrate a firebase project to supabase project",
-  "main": "index.ts",
-  "scripts": {
-    "run": "ts-node index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "Mark Burggraf <mark@supabase.io>",
-  "license": "ISC",
-  "dependencies": {
-    "@supabase/supabase-js": "^1.30.7",
-    "firebase-admin": "^10.0.2",
-    "firebase-scrypt": "^2.1.0",
-    "moment": "^2.29.1",
-    "pg": "^8.7.1",
-    "stream-json": "^1.7.3"
-  }
+    "name": "firebase-to-supabase",
+    "version": "1.0.0",
+    "description": "Migrate a firebase project to supabase project",
+    "main": "index.ts",
+    "scripts": {
+        "build": "pnpm clean && tsc --build ./tsconfig.json",
+        "clean": "rm -rf ./dist",
+        "auth-export": "cd dist/auth && node firestoreusers2json.js",
+        "auth-import": "cd dist/auth && node import_users.js",
+        "firestore-collections": "cd dist/firestore && node collections.js",
+        "firestore-export-collection": "cd dist/firestore && node export-collection.js",
+        "firestore-export-all": "cd dist/firestore && node export-all.js",
+        "firestore-import-all": "cd dist/firestore && node import-all.js",
+        "firestore-import": "cd dist/firestore && node json2supabase.js"
+    },
+    "author": "Mark Burggraf <mark@supabase.io>",
+    "license": "ISC",
+    "dependencies": {
+        "@supabase/supabase-js": "^2.8.0",
+        "firebase-admin": "^11.5.0",
+        "firebase-scrypt": "^2.2.0",
+        "moment": "^2.29.4",
+        "pg": "^8.9.0",
+        "stream-json": "^1.7.5"
+    },
+    "devDependencies": {
+        "@firebase/app-types": "0.9.0",
+        "@firebase/logger": "0.4.0",
+        "@types/node": "18.14.1",
+        "@types/pg": "8.6.6",
+        "@types/stream-json": "1.7.3",
+        "prettier": "2.8.4",
+        "typescript": "4.9.5"
+    }
 }

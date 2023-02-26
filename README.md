@@ -1,6 +1,6 @@
 # Firebase to Supabase Migration Guide
 
-* [Auth Migration](/auth)
-* [Firestore Data Migration](/firestore)
-* [Storage Migration](/storage)
-* [Migrating Functions](/functions)
+* [Auth Migration](/src/auth)
+* [Firestore Data Migration](/src/firestore)
+* [Storage Migration](/src/storage)
+* [Migrating Functions](/src/functions)
