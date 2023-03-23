@@ -131,16 +131,37 @@ export async function parseFieldsFromJSONFile(filename: string): Promise<{ [key:
         //Key is the array-index here
         jsonStream.on("data", ({ key, value }) => {
             for (const attr in value) {
+                const v = value[attr]
+                const valueType = typeof v
+
+                // cast all numbers to float (double precision) as its the only numeric type in postgres that closely matches a js number
+                // without this some client libraries will return strings for numbers which is a major PITA
                 if (!fields[attr]) {
-                    fields[attr] = typeof value[attr]
+                    if (valueType === "number" && Number.isInteger(v)) {
+                        fields[attr] = "number"
+                    } else {
+                        fields[attr] = typeof value[attr]
+                    }
                 }
-                if (fields[attr] !== typeof value[attr] && fields[attr] !== "object" && value[attr] !== null) {
-                    console.log(`multiple field types found for field ${attr}: ${fields[attr]}, ${typeof value[attr]}`)
-                    console.log(`casting ${attr} to type object (JSONB)`)
-                    fields[attr] = "object"
-                    // quit();
-                    // reject(`multiple field types found for field ${attr}: ${fields[attr]}, ${typeof value[attr]}`);
-                    // process.exit(1);
+                if (fields[attr] && fields[attr] === "integer" && valueType === "number" && !Number.isInteger(v)) {
+                    console.log(`Found a float for field ${attr}, casting to type double precision`)
+                    fields[attr] = "number"
+                }
+                if (fields[attr] !== valueType) {
+                    if (fields[attr] === "integer" && valueType === "number") {
+                        // do nothing, we already casted to double precision if necessary
+                    } else {
+                        if (fields[attr] !== "object" && value[attr] !== null) {
+                            console.log(
+                                `multiple field types found for field ${attr}: ${fields[attr]}, ${typeof value[attr]}`
+                            )
+                            console.log(`casting ${attr} to type object (JSONB)`)
+                            fields[attr] = "object"
+                            // quit();
+                            // reject(`multiple field types found for field ${attr}: ${fields[attr]}, ${typeof value[attr]}`);
+                            // process.exit(1);
+                        }
+                    }
                 }
             }
         })
@@ -177,7 +198,14 @@ export async function importDataFromJSONFile(args: ImportCollectionArgs) {
                 if (typeof val === "object" || fields[attr] === "jsonb") val = JSON.stringify(val)
                 if (typeof val === "undefined") {
                     sql += `${sql.length > 1 ? "," : ""}null`
-                } else if (fields[attr] !== "numeric" && fields[attr] !== "boolean") {
+                } else if (
+                    fields[attr] !== "double precision" &&
+                    fields[attr] !== "bigint" &&
+                    fields[attr] !== "float" &&
+                    fields[attr] !== "integer" &&
+                    fields[attr] !== "numeric" &&
+                    fields[attr] !== "boolean"
+                ) {
                     sql += `${sql.length > 1 ? "," : ""}'${val.replace(/'/g, "''")}'`
                 } else {
                     sql += `${sql.length > 1 ? "," : ""}${value[attr]}`
@@ -220,7 +248,7 @@ function makeInsertStatement(args: ImportCollectionArgs, insertRows: string[]) {
         fieldList += `,${primary_key_name}`
     }
 
-    let sql = `insert into "${tableName}" (${fieldList}) values ${insertRows.join(",")}`
+    let sql = `insert into "${tableName}" (${fieldList}) values ${insertRows.join(",")} ON CONFLICT DO NOTHING`
     fs.writeFileSync("temp.sql", sql, "utf8")
     return sql
 }
@@ -243,10 +271,12 @@ async function runSQL(sql: string, client: Client) {
 
 function jsToSqlType(type: string) {
     switch (type) {
+        case "integer":
+            return "float"
         case "string":
             return "text"
         case "number":
-            return "numeric"
+            return "float"
         case "boolean":
             return "boolean"
         case "object":

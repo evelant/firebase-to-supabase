@@ -13,7 +13,7 @@ let limit = 0
 
 export const exportEntireCollection = async (collectionName: string) => {
     deleteIfExists(`../../exported/firestore/${collectionName}.json`)
-    return await exportFromCollection(collectionName, 0, 50000, 0)
+    return await exportFromCollection(collectionName, 0, 5000, 0)
 }
 export async function exportFromCollection(
     collectionName: string,
