@@ -11,12 +11,13 @@ import * as fs from "fs"
 const recordCounters: RecordCounters = {}
 let limit = 0
 
-export const exportEntireCollection = async (collectionName: string) => {
-    deleteIfExists(`../../exported/firestore/${collectionName}.json`)
-    return await exportFromCollection(collectionName, 0, 5000, 0)
+export const exportEntireCollection = async (collectionName: string, credentialsDir: string) => {
+    deleteIfExists(`../../exported/firestore/${credentialsDir}/${collectionName}.json`)
+    return await exportFromCollection(collectionName, credentialsDir, 0, 1000, 0)
 }
 export async function exportFromCollection(
     collectionName: string,
+    credentialsDir: string,
     offset: number,
     batchSize: number,
     limit: number,
@@ -24,6 +25,9 @@ export async function exportFromCollection(
 ) {
     if (offset == 0) {
         console.log(`Begin export of ${collectionName}`)
+        if (fs.existsSync(`../../exported/firestore/${credentialsDir}/${collectionName}.json`))
+            console.log(`removing previous export of ${collectionName} at exported/firestore/${credentialsDir}`)
+        fs.rmSync(`../../exported/firestore/${credentialsDir}/${collectionName}.json`, { force: true })
     }
     const s = performance.now()
     const { data, error } = await getBatch(collectionName, offset, batchSize, limit, processDocument)
@@ -31,7 +35,7 @@ export async function exportFromCollection(
         console.error(`Error processing ${collectionName} chunk at offset ${offset}!`, error)
         throw error
     }
-    writeRecordsSync(collectionName, data, recordCounters, "firestore")
+    writeRecordsSync(collectionName, data, recordCounters, `firestore/${credentialsDir}`)
     const s2 = performance.now()
     console.log(
         `    progress: exported total of ${data.length + offset} docs from ${collectionName} in ${
@@ -39,14 +43,21 @@ export async function exportFromCollection(
         }s`
     )
     if (data.length > 0) {
-        await exportFromCollection(collectionName, offset + data.length, batchSize, limit, processDocument)
+        await exportFromCollection(
+            collectionName,
+            credentialsDir,
+            offset + data.length,
+            batchSize,
+            limit,
+            processDocument
+        )
     } else {
-        cleanUp(collectionName)
+        cleanUp(collectionName, credentialsDir)
         console.log(`    Done: ${recordCounters[collectionName]} records written to ${collectionName}.json`)
     }
 }
-const cleanUp = (collectionName: string) => {
-    fs.appendFileSync(`../../exported/firestore/${collectionName}.json`, "\n]", "utf8")
+const cleanUp = (collectionName: string, credentialsDir: string) => {
+    fs.appendFileSync(`../../exported/firestore/${credentialsDir}/${collectionName}.json`, "\n]", "utf8")
 }
 
 async function getBatch(

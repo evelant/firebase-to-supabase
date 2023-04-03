@@ -9,9 +9,15 @@ __*
 fly.toml
 local.env.sh
 
+.DS_Store
+**/.DS_Store
 credentials/firebase-service.json
 credentials/supabase-service.json
 credentials/supabase-keys.json
+credentials/*
 exported/**/*
 dist
 **/temp.sql
+**/.DS_Store
+.DS_Store
+backups

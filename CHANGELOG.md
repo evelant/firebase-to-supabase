@@ -1,6 +1,6 @@
 ### 1.0.0
 
-@evelant
+Big overhaul by @evelant
 
 -   Added CHANGELOG.md file
 -   Switch from npm to pnpm
@@ -9,6 +9,7 @@
 -   Move source files to `src` folder
 -   Update dependencies to latest versions
 -   Write all exported data into `exported/{auth,firestore,storage}` folder by default
+-   Add `firestore-export-all` and `firestore-import-all` commands
 -   Require only one instance of credentials for all scripts saved in `credentials` folder
 -   Add scripts to package.json for easier invocation
     -   `pnpm build` to clean and build with tsc
@@ -26,6 +27,7 @@
 ### Bug fixes
 
 -   Fixed bug with firestore export creating invalid JSON when export has more than one batch
--  Fixed bug with firestore export stopping after a single batch
+-   Fixed bug with firestore export stopping after a single batch
 -   Fixed bug with auth export not sanitizing data causing imports containing `'` (single quote) to fail
-- Fixed bug when using firestore_id as primary key in firestore import
+-   Fixed bug when using firestore_id as primary key in firestore import
+-   Fixed bug where import fails if firestore happens to have a number of documents exactly divisible by 100

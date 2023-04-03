@@ -1,9 +1,14 @@
 import { existsSync, mkdirSync } from "fs"
-import { getBucketName, getStorageInstance } from "../utils/utils"
+import { getBucketName, getCredentials, getStorageInstance } from "../utils/utils"
 
 const args = process.argv.slice(2)
 if (args.length < 1) {
-    console.log("Usage: node download.js <prefix> [<folder>] [<batchSize>] [<limit>] [<token>]")
+    console.log(
+        "Usage: pnpm firebase-storage-export <credentialsDir> <prefix> [<folder>] [<batchSize>] [<limit>] [<token>]"
+    )
+    console.log(
+        "   <credentialsDir>: name of directory inside credentials/ to load credential from (e.g. 'local' or 'staging' or 'prod')"
+    )
     console.log("       <prefix>: the prefix of the files to download")
     console.log('                 to process the root bucket use prefix ""')
     console.log('       <folder>: (optional), name of subfolder for downloaded files, default is "downloads"')
@@ -12,7 +17,8 @@ if (args.length < 1) {
     console.log("       <token>: (optional), begin processing at this pageToken")
     process.exit(1)
 }
-const prefix = args[0]
+const { credentialsDir, firebaseServiceAccount, supabaseServiceAccount } = getCredentials()
+const prefix = args[1]
 let batchSize: number
 let limit: number = 0
 let count: number = 0
@@ -33,8 +39,8 @@ let folder: string = "downloads"
 // https://googleapis.dev/nodejs/storage/latest/global.html#GetFilesOptions
 //
 try {
-    if (args[1]) {
-        folder = args[1]
+    if (args[2]) {
+        folder = args[2]
     }
     // check if folder is a valid folder name
     if (!folder.match(/^[a-zA-Z0-9_\-]+$/)) {
@@ -51,22 +57,22 @@ try {
 }
 
 try {
-    batchSize = parseInt(args[2] || "100")
+    batchSize = parseInt(args[3] || "100")
 } catch (err) {
     console.error("error setting batchSize:")
     console.error(err)
     process.exit(1)
 }
 try {
-    limit = parseInt(args[3] || "0")
+    limit = parseInt(args[4] || "0")
 } catch (err) {
     console.error("error setting limit:")
     console.error(err)
     process.exit(1)
 }
 try {
-    if (args[4]) {
-        token = args[4]
+    if (args[5]) {
+        token = args[5]
 
         if (token.length !== 64) {
             console.error("token must be 20 characters long")
@@ -88,7 +94,7 @@ async function processBatch(fileSet: File[], queryForNextPage: any) {
         try {
             console.log("downloading: ", file.name)
             const [err] = await storage
-                .bucket(getBucketName())
+                .bucket(getBucketName(firebaseServiceAccount))
                 .file(file.name)
                 .download({
                     destination: `./${folder}/${encodeURIComponent(file.name)}`,
@@ -114,7 +120,7 @@ async function processBatch(fileSet: File[], queryForNextPage: any) {
 
 async function getBatch(query: any) {
     const fileSet: File[] = []
-    const [files, queryForNextPage] = await storage.bucket(getBucketName()).getFiles(query)
+    const [files, queryForNextPage] = await storage.bucket(getBucketName(firebaseServiceAccount)).getFiles(query)
     let c = 0
     console.log("processing page: ", (queryForNextPage as any)?.pageToken! || "<starting page>")
     files.forEach(async function (file) {

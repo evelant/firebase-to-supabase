@@ -1,25 +1,28 @@
 //import { getFirestoreInstance } from './utils';
 import * as fs from "fs"
 import * as admin from "firebase-admin"
-import { getAuthInstance } from "../utils/utils"
-
-const args = process.argv.slice(2)
-
-if (args.length < 0) {
-    console.log("Usage: node firestoreusers2json.js [<filename.json>] [<batch_size>]")
-    console.log("   <filename.json>: (optional) output filename (defaults to ./users.json")
-    console.log("   <batch_size>: (optional) number of users to fetch at a time (defaults to 100)")
-    process.exit(1)
-} else {
-    main()
-}
+import { getAuthInstance, getCredentials } from "../utils/utils"
 
 async function main() {
-    const filename = args[0] || "./users.json"
-    const dirPath = `../../exported/auth`
+    const args = process.argv.slice(2)
+
+    if (args.length < 0) {
+        console.log("Usage: pnpm auth-export <credentialsDir> [<filename.json>] [<batch_size>]")
+        console.log(
+            "   <credentialsDir>: name of directory inside credentials/ to load credential from (e.g. 'local' or 'staging' or 'prod')"
+        )
+        console.log("   <filename.json>: (optional) output filename (defaults to ./users.json")
+        console.log("   <batch_size>: (optional) number of users to fetch at a time (defaults to 100)")
+        process.exit(1)
+    }
+    const { firebaseServiceAccount, supabaseServiceAccount, credentialsDir } = getCredentials()
+
+    const filename = args[1] || "./users.json"
+    const dirPath = `../../exported/${credentialsDir}/auth`
     fs.mkdirSync(dirPath, { recursive: true })
     const filePath = `${dirPath}/${filename}`
-    const batchSizeInput = args[1] || "100"
+    fs.rmSync(filePath, { force: true })
+    const batchSizeInput = args[2] || "100"
     const batchSize = parseInt(batchSizeInput)
     fs.writeFileSync(filePath, "[", "utf-8")
     listUsers(filePath, batchSize, true)
@@ -50,3 +53,5 @@ async function listUsers(filename: string, batchSize: number, firstBatch: boolea
             console.log("ERROR in listUsers", JSON.stringify(err))
         })
 }
+
+main()

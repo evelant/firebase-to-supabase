@@ -1,7 +1,7 @@
 import { Client } from "pg"
 import StreamArray from "stream-json/streamers/StreamArray"
 import * as fs from "fs"
-import { getPgClient } from "../utils/utils"
+import { getCredentials, getPgClient } from "../utils/utils"
 
 function quit() {
     process.exit(1)
@@ -9,6 +9,7 @@ function quit() {
 
 export interface ImportCollectionArgs {
     filename: string
+    credentialsDir: string
     client: Client
     tableName: string
     fields: { [key: string]: string }
@@ -17,12 +18,14 @@ export interface ImportCollectionArgs {
 }
 export const buildImportArgs = async (
     collectionName: string,
+    importFromDir: string,
     primary_key_strategy: string = "none",
     primary_key_name: string = "id"
 ): Promise<ImportCollectionArgs> => {
-    const filename = `../../exported/firestore/${collectionName}.json`
+    const { credentialsDir, supabaseServiceAccount } = getCredentials()
+    const filename = `../../exported/firestore/${importFromDir}/${collectionName}.json`
     if (!fs.existsSync(filename)) throw new Error(`file "${filename}" does not exist`)
-    const client: Client = await getPgClient()
+    const client: Client = await getPgClient(supabaseServiceAccount)
     const fields = await parseFieldsFromJSONFile(filename)
     if (fields[primary_key_name]) {
         console.log(
@@ -36,6 +39,7 @@ export const buildImportArgs = async (
     return {
         client,
         filename,
+        credentialsDir,
         fields,
         tableName,
         primary_key_strategy,
@@ -78,7 +82,9 @@ export async function createTableForCollection(args: ImportCollectionArgs) {
                             if (
                                 attr === primary_key_name
                                     ? getKeyType(primary_key_strategy) !== dataType
-                                    : dataType !== fields[attr]
+                                    : //handle float being an alias for double precision
+                                      !(dataType === "double precision" && fields[attr] === "float") &&
+                                      dataType !== fields[attr]
                             ) {
                                 console.log(`data type mismatch for field ${attr}: ${dataType}, ${fields[attr]}`)
                                 quit()
@@ -144,7 +150,7 @@ export async function parseFieldsFromJSONFile(filename: string): Promise<{ [key:
                     }
                 }
                 if (fields[attr] && fields[attr] === "integer" && valueType === "number" && !Number.isInteger(v)) {
-                    console.log(`Found a float for field ${attr}, casting to type double precision`)
+                    console.log(`Found a float for field ${attr}, casting to type float`)
                     fields[attr] = "number"
                 }
                 if (fields[attr] !== valueType) {
@@ -232,7 +238,9 @@ export async function importDataFromJSONFile(args: ImportCollectionArgs) {
         })
 
         jsonStream.on("end", async () => {
-            const result = await runSQL(makeInsertStatement(args, insertRows), client)
+            if (insertRows.length > 0) {
+                await runSQL(makeInsertStatement(args, insertRows), client)
+            }
             console.log(`inserted ${numProcessed} rows into ${tableName}`)
             resolve("DONE")
         })
@@ -246,6 +254,10 @@ function makeInsertStatement(args: ImportCollectionArgs, insertRows: string[]) {
     }
     if (primary_key_strategy === "firestore_id") {
         fieldList += `,${primary_key_name}`
+    }
+    if (insertRows.length === 0) {
+        console.error(`No rows to insert into ${tableName}!`, insertRows)
+        throw new Error(`No rows to insert into ${tableName}!`)
     }
 
     let sql = `insert into "${tableName}" (${fieldList}) values ${insertRows.join(",")} ON CONFLICT DO NOTHING`

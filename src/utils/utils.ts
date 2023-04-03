@@ -7,14 +7,59 @@ import Storage = storage.Storage
 import Auth = auth.Auth
 import { Client } from "pg"
 
-const serviceAccount = require("../../credentials/firebase-service.json")
-
 export interface RecordCounters {
     [key: string]: number
 }
 
 export interface FirestoreDoc {
     [key: string]: any
+}
+export interface FirebaseServiceAccountType {
+    type: "service_account"
+    project_id: string
+    private_key_id: string
+    private_key: string
+    client_email: string
+    client_id: string
+    auth_uri: string
+    token_uri: string
+    auth_provider_x509_cert_url: string
+    client_x509_cert_url: string
+    database_url: string
+}
+
+export const getCredentials = (): {
+    credentialsDir: string
+    firebaseServiceAccount: FirebaseServiceAccountType
+    supabaseServiceAccount: PgCredentials
+} => {
+    const args = process.argv.slice(2)
+    const credentialsDir = args[0]
+    if (!credentialsDir) {
+        console.log("first argument must be credentials subdirectory name")
+        process.exit(1)
+    }
+    if (!fs.existsSync(`../../credentials/${credentialsDir}/firebase-service.json`)) {
+        console.log(`credentials/${credentialsDir}/firebase-service.json does not exist`)
+        process.exit(1)
+    }
+    if (!fs.existsSync(`../../credentials/${credentialsDir}/supabase-service.json`)) {
+        console.log(`credentials/${credentialsDir}/supabase-service.json does not exist`)
+        process.exit(1)
+    }
+    try {
+        const credentials = {
+            firebaseServiceAccount: JSON.parse(
+                fs.readFileSync(`../../credentials/${credentialsDir}/firebase-service.json`, "utf8")
+            ) as FirebaseServiceAccountType,
+            supabaseServiceAccount: getPgCredentials(credentialsDir),
+            credentialsDir,
+        }
+        return credentials
+    } catch (error: any) {
+        console.log("Error reading credentials, are they valid JSON?", error)
+        process.exit(1)
+    }
 }
 
 export interface DocumentProcessor {
@@ -26,7 +71,7 @@ export interface DocumentProcessor {
     ): FirestoreDoc
 }
 
-export function getBucketName(): string {
+export function getBucketName(serviceAccount: FirebaseServiceAccountType): string {
     return `${serviceAccount.project_id}.appspot.com`
 }
 
@@ -36,10 +81,11 @@ let adminApp: App
 function getFirebaseApp() {
     if (!adminApp) {
         try {
+            const { firebaseServiceAccount: serviceAccount } = getCredentials()
             adminApp = admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount),
+                credential: admin.credential.cert(serviceAccount as any),
                 databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`, // "https://PROJECTID.firebaseio.com",
-                storageBucket: getBucketName(),
+                storageBucket: getBucketName(serviceAccount),
             })
         } catch (e) {
             console.error(`Error initializing firebase app`, e)
@@ -82,10 +128,10 @@ export interface PgCredentials {
     port: number
     database: string
 }
-export const getPgCredentials = (): PgCredentials => {
+export const getPgCredentials = (credentialsDir: string): PgCredentials => {
     let pgCreds: PgCredentials
     try {
-        pgCreds = JSON.parse(fs.readFileSync("../../credentials/supabase-service.json", "utf8"))
+        pgCreds = JSON.parse(fs.readFileSync(`../../credentials/${credentialsDir}/supabase-service.json`, "utf8"))
         if (
             typeof pgCreds.user === "string" &&
             typeof pgCreds.password === "string" &&
@@ -103,15 +149,14 @@ export const getPgCredentials = (): PgCredentials => {
             process.exit(1)
         }
     } catch (err) {
-        console.log("error reading supabase-service.json from credentials/supabase-service.json", err)
+        console.log(`error reading supabase-service.json from credentials/${credentialsDir}/supabase-service.json`, err)
         process.exit(1)
     }
     return pgCreds
 }
 
 let pgClient: Client
-export const getPgClient = async () => {
-    const pgCreds = getPgCredentials()
+export const getPgClient = async (pgCreds: PgCredentials) => {
     if (!pgClient) {
         pgClient = new Client({
             user: pgCreds.user,

@@ -6,8 +6,8 @@
     "scripts": {
         "build": "pnpm clean && tsc --build ./tsconfig.json",
         "clean": "rm -rf ./dist",
-        "auth-export": "cd dist/auth && node firestoreusers2json.js",
-        "auth-import": "cd dist/auth && node import_users.js",
+        "auth-export": "cd dist/auth && node firebase-auth-export.js",
+        "auth-import": "cd dist/auth && node supabase-auth-import.js",
         "firestore-collections": "cd dist/firestore && node collections.js",
         "firestore-export-collection": "cd dist/firestore && node export-collection.js",
         "firestore-export-all": "cd dist/firestore && node export-all.js",

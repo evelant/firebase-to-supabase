@@ -2,40 +2,45 @@ import * as fs from "fs"
 import * as moment from "moment"
 import { Client } from "pg"
 import * as StreamArray from "stream-json/streamers/StreamArray"
-import { getPgClient } from "../utils/utils"
+import { getCredentials, getPgClient } from "../utils/utils"
 
-const args = process.argv.slice(2)
-let filename
-let client: Client
+async function main() {
+    const args = process.argv.slice(2)
+    let client: Client
 
-// if (args.length < 1) {
-//     console.log("Usage: node import_users.js [<path_to_json_file>] [<batch_size>]")
-//     console.log("  path_to_json_file: full local path and filename of .json input file (of users), defaults to exported/auth/users.json")
-//     console.log("  batch_size: number of users to process in a batch (defaults to 100)")
-//     process.exit(1)
-// } else {
-filename = args[0] ?? "../../exported/auth/users.json"
-// }
-const BATCH_SIZE = parseInt(args[1], 10) || 100
-if (!BATCH_SIZE || typeof BATCH_SIZE !== "number" || BATCH_SIZE < 1) {
-    console.log("invalid batch_size")
-    process.exit(1)
-}
+    if (args.length < 1) {
+        console.log("Usage: pnpm auth-import credentials_dir [<path_to_json_file>] [<batch_size>]")
+        console.log(
+            "   credentials_dir: name of directory inside credentials/ to load credential from (e.g. 'local' or 'staging' or 'prod')"
+        )
+        console.log(
+            "  path_to_json_file: full local path and filename of .json input file (of users), defaults to exported/auth/{{credentials_dir}}/users.json"
+        )
+        console.log("  batch_size: number of users to process in a batch (defaults to 100)")
+        process.exit(1)
+    }
+    const { firebaseServiceAccount, supabaseServiceAccount, credentialsDir } = getCredentials()
+    const filename = args[1] ?? `../../exported/auth/${credentialsDir}/users.json`
+    const BATCH_SIZE = parseInt(args[2], 10) || 100
 
-async function main(filename: string) {
-    client = await getPgClient()
+    if (!BATCH_SIZE || typeof BATCH_SIZE !== "number" || BATCH_SIZE < 1) {
+        console.log("invalid batch_size")
+        process.exit(1)
+    }
+    client = await getPgClient(supabaseServiceAccount)
 
     console.log(`loading users from ${filename}`)
-    await loadUsers(filename)
+    await loadUsers(filename, client, BATCH_SIZE)
     console.log(`done processing ${filename}`)
-    quit()
+    quit(client)
 }
-function quit() {
+
+function quit(client: Client) {
     client.end()
     process.exit(1)
 }
 
-async function loadUsers(filename: string): Promise<any> {
+async function loadUsers(filename: string, client: Client, BATCH_SIZE: number): Promise<any> {
     return new Promise((resolve, reject) => {
         const Batch = require("stream-json/utils/Batch")
         let insertRows: any[] = []
@@ -62,7 +67,7 @@ async function loadUsers(filename: string): Promise<any> {
             })
             console.log("insertUsers:", insertRows.length)
             pipeline.pause()
-            const result = await insertUsers(insertRows)
+            const result = await insertUsers(insertRows, client)
             insertRows = []
             pipeline.resume()
         })
@@ -73,61 +78,61 @@ async function loadUsers(filename: string): Promise<any> {
     })
 }
 
-async function loadUsers_old(filename: string): Promise<any> {
-    return new Promise((resolve, reject) => {
-        let insertRows: any[] = []
-        const jsonStream = StreamArray.withParser()
-        //internal Node readable stream option, pipe to stream-json to convert it for us
-        fs.createReadStream(filename).pipe(jsonStream.input as any)
+// async function loadUsers_old(filename: string): Promise<any> {
+//     return new Promise((resolve, reject) => {
+//         let insertRows: any[] = []
+//         const jsonStream = StreamArray.withParser()
+//         //internal Node readable stream option, pipe to stream-json to convert it for us
+//         fs.createReadStream(filename).pipe(jsonStream.input as any)
 
-        fs.writeFileSync(`./queue.tmp`, "", "utf-8")
+//         fs.writeFileSync(`./queue.tmp`, "", "utf-8")
 
-        //You'll get json objects here
-        //Key is the array-index here
-        jsonStream.on("data", async ({ key, value }) => {
-            console.log("on data", key)
-            const index = key
-            const user = value
-            insertRows.push(createUser(user))
-            fs.appendFileSync(`./queue.tmp`, createUser(user) + "\n", "utf-8")
-            console.log("insertRows.length", insertRows.length)
-            if (insertRows.length >= 10) {
-                console.log("calling insertUsers")
-                //const result = await insertUsers(insertRows);
-                //console.log('insertUsers result', result);
-                //quit();
-                //insertRows = [];
-            }
-        })
+//         //You'll get json objects here
+//         //Key is the array-index here
+//         jsonStream.on("data", async ({ key, value }) => {
+//             console.log("on data", key)
+//             const index = key
+//             const user = value
+//             insertRows.push(createUser(user))
+//             fs.appendFileSync(`./queue.tmp`, createUser(user) + "\n", "utf-8")
+//             console.log("insertRows.length", insertRows.length)
+//             if (insertRows.length >= 10) {
+//                 console.log("calling insertUsers")
+//                 //const result = await insertUsers(insertRows);
+//                 //console.log('insertUsers result', result);
+//                 //quit();
+//                 //insertRows = [];
+//             }
+//         })
 
-        jsonStream.on("error", err => {
-            console.log("loadUsers error", err)
-            quit()
-        })
+//         jsonStream.on("error", err => {
+//             console.log("loadUsers error", err)
+//             quit()
+//         })
 
-        jsonStream.on("end", async () => {
-            console.log("loadUsers end...")
-            if (insertRows.length > 0) {
-                const result = await insertUsers(insertRows)
-                console.log("insertUsers result", result)
-                insertRows = []
-                resolve("done")
-            }
-        })
-    })
-}
+//         jsonStream.on("end", async () => {
+//             console.log("loadUsers end...")
+//             if (insertRows.length > 0) {
+//                 const result = await insertUsers(insertRows)
+//                 console.log("insertUsers result", result)
+//                 insertRows = []
+//                 resolve("done")
+//             }
+//         })
+//     })
+// }
 
-async function insertUsers(rows: any[]): Promise<any> {
+async function insertUsers(rows: any[], client: Client): Promise<any> {
     const sql = createUserHeader() + rows.join(",\n") + "ON CONFLICT DO NOTHING;"
     // console.log('sql', sql);
-    const result = await runSQL(sql)
+    const result = await runSQL(sql, client)
     return result
 }
 
 function formatDate(date: string) {
     return moment.utc(date).toISOString()
 }
-async function runSQL(sql: string): Promise<any> {
+async function runSQL(sql: string, client: Client): Promise<any> {
     sql = `
     ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS fb_uid varchar(255); 
     ${sql}`
@@ -138,7 +143,7 @@ async function runSQL(sql: string): Promise<any> {
                 console.log("runSQL error:", err)
                 console.log("sql was: ")
                 console.log(sql)
-                quit()
+                quit(client)
                 reject(err)
             } else {
                 resolve(res)
@@ -181,8 +186,6 @@ function getKeyType(primary_key_strategy: string) {
             return ""
     }
 }
-
-main(filename)
 
 function createUserHeader() {
     return `INSERT INTO auth.users (
@@ -274,3 +277,5 @@ function getProviderString(providerData: any[]) {
     const providerString = `{"provider": "${providers[0]}","providers":["${providers.join('","')}"]}`
     return providerString
 }
+
+main()
